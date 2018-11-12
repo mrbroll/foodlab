@@ -16,8 +16,8 @@ type Scraper struct {
 // ScrapeResult is a type for storing the result of
 // scraping a web page containing a recipe.
 type ScrapeResult struct {
-	OutboundLinks []string `json:"outboundLinks"`
-	Recipe        *Recipe  `json:"recipe"`
+	Links  []string `json:"links"`
+	Recipe *Recipe  `json:"recipe"`
 }
 
 // Getter is a client capable of making GET requests.
@@ -50,11 +50,53 @@ func (s *Scraper) Scrape(url string) (*ScrapeResult, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "Parsing HTML.")
 	}
-	res := new(ScrapeResult)
 
 	bfs([]*html.Node{node})
 
-	return res, nil
+	links, err := findLinks(node)
+	if err != nil {
+		return nil, errors.Wrap(err, "Finding links.")
+	}
+
+	title, err := findTitle(node)
+	if err != nil {
+		return nil, errors.Wrap(err, "Finding title.")
+	}
+
+	ingredients, err := findIngredients(node)
+	if err != nil {
+		return nil, errors.Wrap(err, "Finding ingredients.")
+	}
+
+	instructions, err := findInstructions(node)
+	if err != nil {
+		return nil, errors.Wrap(err, "Finding instructions.")
+	}
+
+	return &ScrapeResult{
+		Links: links,
+		Recipe: &Recipe{
+			Title:        title,
+			Ingredients:  ingredients,
+			Instructions: instructions,
+		},
+	}, nil
+}
+
+func findLinks(node *html.Node) (links []string, err error) {
+	return links, err
+}
+
+func findTitle(node *html.Node) (title string, err error) {
+	return title, err
+}
+
+func findIngredients(node *html.Node) (ingredients []*Ingredient, err error) {
+	return ingredients, err
+}
+
+func findInstructions(node *html.Node) (instructions []*Instruction, err error) {
+	return instructions, err
 }
 
 func bfs(nodes []*html.Node) {
