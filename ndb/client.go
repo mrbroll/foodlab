@@ -81,6 +81,10 @@ func (c *HTTPClient) FoodSearch(query string) ([]*Food, error) {
 		return nil, errors.Wrap(err, "Unmarshaling NDB search response.")
 	}
 
+	if searchResp.Results == nil {
+		return nil, nil
+	}
+
 	return searchResp.Results.Foods, nil
 }
 

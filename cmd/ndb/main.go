@@ -15,7 +15,7 @@ func main() {
 	httpClient := new(http.Client)
 	ndbClient := ndb.NewHTTPClient(httpClient, apiToken)
 
-	foods, err := ndbClient.FoodSearch("russet potato")
+	foods, err := ndbClient.FoodSearch("potato")
 	if err != nil {
 		panic(err)
 	}
@@ -27,17 +27,18 @@ func main() {
 
 	fmt.Printf("%s\n", foodsJSON)
 
-	foodID := foods[0].NDBID
+	/*
+		foodID := foods[0].NDBID
+		food, err := ndbClient.FoodReport(foodID)
+		if err != nil {
+			panic(err)
+		}
 
-	food, err := ndbClient.FoodReport(foodID)
-	if err != nil {
-		panic(err)
-	}
+		foodJSON, err := json.Marshal(food)
+		if err != nil {
+			panic(err)
+		}
 
-	foodJSON, err := json.Marshal(food)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("%s\n", foodJSON)
+		fmt.Printf("%s\n", foodJSON)
+	*/
 }

@@ -2,6 +2,7 @@ package vine
 
 // Recipe represents a recipe.
 type Recipe struct {
+	URL          string         `json:"url"`
 	Title        string         `json:"title"`
 	Ingredients  []*Ingredient  `json:"ingredients"`
 	Instructions []*Instruction `json:"instructions"`
