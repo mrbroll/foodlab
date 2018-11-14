@@ -10,22 +10,25 @@ import (
 	"google.golang.org/grpc"
 )
 
-type Store interface {
-	RecipeAdder
-}
-
+// RecipeAdder is a type for adding recipes to an underlying storage medium.
 type RecipeAdder interface {
+	// AddRecipe adds the given recipe to the store.
+	// It returns an error if the operation was unsuccessful.
 	AddRecipe(r *Recipe) error
 }
 
+// DgraphStore is a recipe store backed by dgraph.
 type DgraphStore struct {
 	host string
 }
 
+// NewDgraphStore returns a new recipe store for the given Dgraph host.
 func NewDgraphStore(host string) *DgraphStore {
 	return &DgraphStore{host: host}
 }
 
+// AddRecipe adds the given recipe to the store.
+// It returns an error if the operation was unsuccessful.
 func (s *DgraphStore) AddRecipe(r *Recipe) error {
 	conn, err := grpc.Dial(s.host, grpc.WithInsecure())
 	if err != nil {
@@ -47,6 +50,8 @@ func (s *DgraphStore) AddRecipe(r *Recipe) error {
 	return nil
 }
 
+// AlterSchema alters the schema of a Dgraph store.
+// It returns an error if the operator was unsuccessful.
 func (s *DgraphStore) AlterSchema(schema string) error {
 	conn, err := grpc.Dial(s.host, grpc.WithInsecure())
 	if err != nil {

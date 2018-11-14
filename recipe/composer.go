@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -12,24 +13,31 @@ import (
 	"github.com/pkg/errors"
 )
 
+// CLIComposer is a type for composing a recipe via CLI.
 type CLIComposer struct {
 	sr    FoodSearcherReporter
 	store RecipeAdder
 }
 
+// FoodSearcher is a type for searching for foods by keywords.
 type FoodSearcher interface {
 	FoodSearch(query string) ([]*ndb.Food, error)
 }
 
+// FoodReporter is capable of getting NDB food reports.
 type FoodReporter interface {
 	FoodReport(ndbno string) (*ndb.Food, error)
 }
 
+// FoodSearcherReporter is capable of conducting NDB food searches
+// as well as NDB food reports.
 type FoodSearcherReporter interface {
 	FoodSearcher
 	FoodReporter
 }
 
+// NewCLIComposer returns a cli composer using the given interfaces
+// for food searches and reports, as well as recipe storage.
 func NewCLIComposer(sr FoodSearcherReporter, store RecipeAdder) *CLIComposer {
 	return &CLIComposer{
 		sr:    sr,
@@ -37,16 +45,51 @@ func NewCLIComposer(sr FoodSearcherReporter, store RecipeAdder) *CLIComposer {
 	}
 }
 
+// Compose kicks of a cli composition session.
+// It returns an error if the composition failed.
 func (c *CLIComposer) Compose() error {
-	reader := bufio.NewReader(os.Stdin)
-	// add name
+	name, err := c.getName(os.Stdin)
+	if err != nil {
+		return errors.Wrap(err, "Naming recipe")
+	}
+
+	ingredients, err := c.getIngredients(os.Stdin)
+	if err != nil {
+		return errors.Wrap(err, "Adding ingredients to recipe.")
+	}
+
+	instructions, err := c.getInstructions(os.Stdin)
+	if err != nil {
+		return errors.Wrap(err, "Adding instructions to recipe.")
+	}
+
+	// store recipe
+	if err := c.store.AddRecipe(&Recipe{
+		Name:         name,
+		Ingredients:  ingredients,
+		Instructions: instructions,
+	}); err != nil {
+		return errors.Wrap(err, "Adding recipe to store")
+	}
+	return nil
+}
+
+// getName gets a name using input from the given reader.
+// It returns an error if unsuccessful.
+func (c *CLIComposer) getName(in io.Reader) (string, error) {
+	reader := bufio.NewReader(in)
 	fmt.Println("Enter a name for your recipe: ")
 	name, err := reader.ReadString('\n')
 	if err != nil {
-		return errors.Wrap(err, "Reading recipe name.")
+		return "", errors.Wrap(err, "Reading recipe name.")
 	}
-	name = strings.TrimSpace(name)
-	// add ingredients
+	return strings.TrimSpace(name), nil
+}
+
+// getIngredients get ingredients  using input from the given reader.
+// It returns an error if unsuccessful.
+func (c *CLIComposer) getIngredients(in io.Reader) ([]*Ingredient, error) {
+	reader := bufio.NewReader(in)
 	fmt.Println("Please add ingredients:")
 	ingredients := []*Ingredient{}
 	for addIngredient := true; addIngredient; {
@@ -54,13 +97,13 @@ func (c *CLIComposer) Compose() error {
 		fmt.Println("Ingredient Name:")
 		keywords, err := reader.ReadString('\n')
 		if err != nil {
-			return errors.Wrap(err, "Reading ingredient name.")
+			return nil, errors.Wrap(err, "Reading ingredient name.")
 		}
 		keywords = strings.TrimSpace(keywords)
 		// search for suggestions
 		foods, err := c.sr.FoodSearch(keywords)
 		if err != nil {
-			return errors.Wrap(err, "Searching for food.")
+			return nil, errors.Wrap(err, "Searching for food.")
 		}
 		foodMap := map[string]*ndb.Food{}
 		for _, food := range foods {
@@ -71,7 +114,7 @@ func (c *CLIComposer) Compose() error {
 	SELECT_SUGGESTION:
 		foodID, err := reader.ReadString('\n')
 		if err != nil {
-			return errors.Wrap(err, "Reading selected food id.")
+			return nil, errors.Wrap(err, "Reading selected food id.")
 		}
 		foodID = strings.TrimSpace(foodID)
 		food, ok := foodMap[foodID]
@@ -80,11 +123,12 @@ func (c *CLIComposer) Compose() error {
 			goto SELECT_SUGGESTION
 		}
 		ingredient.Name = food.Name
-		// get food report
 
+		// TODO: use food report to calculate nutrition
+		// this just prints for now
 		foodReport, err := c.sr.FoodReport(food.NDBID)
 		if err != nil {
-			return errors.Wrapf(err, "Getting food report for ndb id %s.", food.NDBID)
+			return nil, errors.Wrapf(err, "Getting food report for ndb id %s.", food.NDBID)
 		}
 		foodJSON, _ := json.MarshalIndent(foodReport, "", "  ")
 		fmt.Printf("%s\n", foodJSON)
@@ -93,7 +137,7 @@ func (c *CLIComposer) Compose() error {
 		fmt.Println("Ingredient Measurement (<number> [<unit>]:")
 		m, err := reader.ReadString('\n')
 		if err != nil {
-			return errors.Wrap(err, "Reading ingredient measurement.")
+			return nil, errors.Wrap(err, "Reading ingredient measurement.")
 		}
 		mParts := strings.Split(strings.TrimSpace(m), " ")
 		if len(mParts) >= 1 {
@@ -113,8 +157,7 @@ func (c *CLIComposer) Compose() error {
 			}
 			meas.Unit = unit
 		} else {
-			// get quantity for nutrients
-
+			//TODO: get food unit size for nutrients
 		}
 		ingredient.Measurement = meas
 		ingredients = append(ingredients, ingredient)
@@ -122,21 +165,27 @@ func (c *CLIComposer) Compose() error {
 		fmt.Println("Would you like to add another ingredient? (y/n):")
 		a, err := reader.ReadString('\n')
 		if err != nil {
-			return errors.Wrap(err, "Reading next instruction answer.")
+			return nil, errors.Wrap(err, "Reading next instruction answer.")
 		}
 		if strings.TrimSpace(a) == "n" {
 			addIngredient = false
 		}
 	}
 
-	// add instructions
+	return ingredients, nil
+}
+
+// getInstructions gets instructions from the given reader.
+// It returns an error if unsuccessful.
+func (c *CLIComposer) getInstructions(in io.Reader) ([]*Instruction, error) {
+	reader := bufio.NewReader(in)
 	instructions := []*Instruction{}
 	for iNo, addInstruction := 1, true; addInstruction; iNo++ {
 		instruction := new(Instruction)
 		fmt.Println("Enter Instruction:")
 		txt, err := reader.ReadString('\n')
 		if err != nil {
-			return errors.Wrap(err, "Reading instruction.")
+			return nil, errors.Wrap(err, "Reading instruction.")
 		}
 		instruction.Order = iNo
 		instruction.Text = strings.TrimSpace(txt)
@@ -144,20 +193,11 @@ func (c *CLIComposer) Compose() error {
 		fmt.Println("Would you like to add another instruction? (y/n):")
 		a, err := reader.ReadString('\n')
 		if err != nil {
-			return errors.Wrap(err, "Reading next instruction answer.")
+			return nil, errors.Wrap(err, "Reading next instruction answer.")
 		}
 		if strings.TrimSpace(a) == "n" {
 			addInstruction = false
 		}
 	}
-
-	// store recipe
-	if err := c.store.AddRecipe(&Recipe{
-		Name:         name,
-		Ingredients:  ingredients,
-		Instructions: instructions,
-	}); err != nil {
-		return errors.Wrap(err, "Adding recipe to store")
-	}
-	return nil
+	return instructions, nil
 }

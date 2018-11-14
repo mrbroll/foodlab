@@ -1,14 +1,24 @@
 package recipe
 
 const (
-	Count      MeasuredUnit = ""
-	Inch       MeasuredUnit = "in"
-	Cup        MeasuredUnit = "c"
+	// Count is a unit for counts of items.
+	Count MeasuredUnit = ""
+
+	// Inch is a unit of measure for length.
+	Inch MeasuredUnit = "in"
+
+	// Cup is a unit of measure for volume.
+	Cup MeasuredUnit = "c"
+
+	// Tablespoon is a unit of measure for volume.
 	Tablespoon MeasuredUnit = "tbsp"
-	Teaspoon   MeasuredUnit = "tsp"
+
+	// Teaspoon is a unit of measure for volume.
+	Teaspoon MeasuredUnit = "tsp"
 )
 
 var (
+	// UnitAliases maps aliases to canonical units.
 	UnitAliases = map[string]MeasuredUnit{
 		"":            Count,
 		"count":       Count,
@@ -55,4 +65,5 @@ type Measurement struct {
 	Unit  MeasuredUnit `json:"unit,omitempty"`
 }
 
+// MeasuredUnit is type for units of measure.
 type MeasuredUnit string

@@ -12,18 +12,20 @@ import (
 const (
 	baseURL            string = "api.nal.usda.gov/ndb"
 	defaultSearchLimit int    = 50
-	searchDataSource   string = "Standard Reference"
 )
 
+// Getter is an interface for making HTTP GET requests.
 type Getter interface {
 	Get(url string) (*http.Response, error)
 }
 
+// HTTPClient is a type for making HTTP requests to the NDB API.
 type HTTPClient struct {
 	getter Getter
 	token  string
 }
 
+// NewHTTPClient returns an NDB client backed by the HTTP REST API.
 func NewHTTPClient(getter Getter, token string) *HTTPClient {
 	return &HTTPClient{
 		getter: getter,
@@ -40,7 +42,6 @@ func (c *HTTPClient) FoodSearch(query string) ([]*Food, error) {
 		baseURL,
 		c.token,
 		url.QueryEscape(query),
-		// url.QueryEscape(searchDataSource),
 		defaultSearchLimit,
 	)
 
@@ -72,6 +73,8 @@ func (c *HTTPClient) FoodSearch(query string) ([]*Food, error) {
 	return searchResp.Results.Foods, nil
 }
 
+// FoodReport returns an NDB food report for the food with the given ndbno.
+// It returns an error if the request was unsuccessful.
 func (c *HTTPClient) FoodReport(ndbno string) (*Food, error) {
 	url := fmt.Sprintf(
 		"http://%s/reports?api_key=%s&ndbno=%s",
