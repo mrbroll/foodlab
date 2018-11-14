@@ -28,28 +28,31 @@ var (
 
 // Recipe represents a recipe.
 type Recipe struct {
-	Name         string         `json:"name"`
-	Ingredients  []*Ingredient  `json:"ingredients"`
-	Instructions []*Instruction `json:"instructions"`
+	Uid          string         `json:"uid,omitempty"`
+	Name         string         `json:"name,omitempty"`
+	Ingredients  []*Ingredient  `json:"ingredient,omitempty"`
+	Instructions []*Instruction `json:"instruction,omitempty"`
 }
 
 // Ingredient is a single ingredient of a recipe.
 type Ingredient struct {
-	Name        string       `json:"name"`
-	Measurement *Measurement `json:"measurement"`
-	Preparation string       `json:"preparation"`
+	Uid         string       `json:"uid,omitempty"`
+	Name        string       `json:"name,omitempty"`
+	Measurement *Measurement `json:"measurement,omitempty"`
+	Preparation string       `json:"preparation,omitempty"`
 }
 
 // Instruction is a single instruction for preparing a recipe.
 type Instruction struct {
-	Order int
-	Text  string
+	Uid   string `json:"uid,omitempty"`
+	Order int    `json:"order,omitempty"`
+	Text  string `json:"text,omitempty"`
 }
 
 // Measurement describes the quantity of an ingredient in a recipe.
 type Measurement struct {
-	Value float64
-	Unit  MeasuredUnit
+	Value float64      `json:"value,omitempty"`
+	Unit  MeasuredUnit `json:"unit,omitempty"`
 }
 
 type MeasuredUnit string

@@ -15,18 +15,6 @@ const (
 	searchDataSource   string = "Standard Reference"
 )
 
-type FoodGroupLister interface {
-	ListFoodGroups() ([]*FoodGroup, error)
-}
-
-type FoodSearcher interface {
-	FoodSearch(query string) ([]*Food, error)
-}
-
-type FoodReporter interface {
-	FoodReport(ndbno string) (*Food, error)
-}
-
 type Getter interface {
 	Get(url string) (*http.Response, error)
 }
@@ -43,10 +31,6 @@ func NewHTTPClient(getter Getter, token string) *HTTPClient {
 	}
 }
 
-func (c *HTTPClient) ListFoodGroups() ([]*FoodGroup, error) {
-	return nil, nil
-}
-
 // FoodSearch searches for foods matching the given query.
 // It returns an error if any encoding/decoding errors are encountered,
 // or there was an issue making the request to the NDB API.
@@ -56,7 +40,7 @@ func (c *HTTPClient) FoodSearch(query string) ([]*Food, error) {
 		baseURL,
 		c.token,
 		url.QueryEscape(query),
-		url.QueryEscape(searchDataSource),
+		// url.QueryEscape(searchDataSource),
 		defaultSearchLimit,
 	)
 
