@@ -10,11 +10,22 @@ import (
 	"google.golang.org/grpc"
 )
 
+// RecipeStore is an interface for storing and retrieving recipe data.
+type RecipeStore interface {
+	RecipeAdder
+	IngredientGetter
+}
+
 // RecipeAdder is a type for adding recipes to an underlying storage medium.
 type RecipeAdder interface {
 	// AddRecipe adds the given recipe to the store.
 	// It returns an error if the operation was unsuccessful.
 	AddRecipe(r *Recipe) error
+}
+
+// Ingredient getter gets an ingredient by name.
+type IngredientGetter interface {
+	GetIngredient(name string) (*Ingredient, error)
 }
 
 // DgraphStore is a recipe store backed by dgraph.
@@ -48,6 +59,38 @@ func (s *DgraphStore) AddRecipe(r *Recipe) error {
 		return errors.Wrap(err, "Committing mutation txn.")
 	}
 	return nil
+}
+
+// GetIngredient gets an ingredient by name.
+// It returns an error if unsuccessful.
+func (s *DgraphStore) GetIngredient(name string) (*Ingredient, error) {
+	conn, err := grpc.Dial(s.host, grpc.WithInsecure())
+	if err != nil {
+		return nil, errors.Wrapf(err, "Dialing grpc host %s.", s.host)
+	}
+	defer conn.Close()
+	client := dgo.NewDgraphClient(api.NewDgraphClient(conn))
+	vars := map[string]string{"$name": name}
+	q := `query Ingredient($name: string) {
+				ingredient(func: eq(name@., $name)) {
+					uid
+				}
+			}`
+	resp, err := client.NewTxn().QueryWithVars(context.Background(), q, vars)
+	if err != nil {
+		return nil, errors.Wrap(err, "Querying for food node.")
+	}
+	type Root struct {
+		Ingredients []*Ingredient `json:"ingredient"`
+	}
+	r := new(Root)
+	if err := json.Unmarshal(resp.Json, r); err != nil {
+		return nil, errors.Wrap(err, "Unmarshaling respons JSON.")
+	}
+	if r != nil && len(r.Ingredients) != 0 {
+		return r.Ingredients[0], nil
+	}
+	return nil, nil
 }
 
 // AlterSchema alters the schema of a Dgraph store.

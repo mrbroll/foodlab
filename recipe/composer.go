@@ -16,7 +16,7 @@ import (
 // CLIComposer is a type for composing a recipe via CLI.
 type CLIComposer struct {
 	sr    FoodSearcherReporter
-	store RecipeAdder
+	store RecipeStore
 }
 
 // FoodSearcher is a type for searching for foods by keywords.
@@ -38,7 +38,7 @@ type FoodSearcherReporter interface {
 
 // NewCLIComposer returns a cli composer using the given interfaces
 // for food searches and reports, as well as recipe storage.
-func NewCLIComposer(sr FoodSearcherReporter, store RecipeAdder) *CLIComposer {
+func NewCLIComposer(sr FoodSearcherReporter, store RecipeStore) *CLIComposer {
 	return &CLIComposer{
 		sr:    sr,
 		store: store,
@@ -123,6 +123,14 @@ func (c *CLIComposer) getIngredients(in io.Reader) ([]*Ingredient, error) {
 			goto SELECT_SUGGESTION
 		}
 		ingredient.Name = food.Name
+		node, err := c.store.GetIngredient(food.Name)
+		if err != nil {
+			return nil, errors.Wrap(err, "Getting ingredient from store.")
+		}
+		fmt.Printf("%+v\n", node)
+		if node != nil {
+			ingredient.Uid = node.Uid
+		}
 
 		// TODO: use food report to calculate nutrition
 		// this just prints for now
