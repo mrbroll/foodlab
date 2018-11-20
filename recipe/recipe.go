@@ -17,51 +17,17 @@ type Recipe struct {
 	Instructions []*Instruction `json:"instruction"`
 }
 
+// RecipeNutrition is a type for viewing aggregate nutritional info.
 type RecipeNutrition struct {
 	Name      string                       `json:"name"`
 	Nutrition []*SimpleNutrientMeasurement `json:"nutrition"`
 }
 
+// SimpleNutrientMeasurement is a type for displaying nutrition content.
 type SimpleNutrientMeasurement struct {
 	Name  string  `json:"name"`
 	Unit  string  `json:"unit"`
 	Value float64 `json:"value"`
-}
-
-func (r *Recipe) AggregateNutrition() *RecipeNutrition {
-	nutrMap := map[string]*SimpleNutrientMeasurement{}
-	for _, ing := range r.Ingredients {
-		unit := ing.Unit
-		food := ing.Food
-		var foodMeasure *FoodMeasurement
-		for _, fMeas := range food.Measurements {
-			if fMeas.Unit == unit {
-				foodMeasure = fMeas
-				break
-			}
-		}
-		mul := ing.Value / foodMeasure.Value
-		for _, nMeas := range foodMeasure.NutrientMeasurements {
-			snm, ok := nutrMap[nMeas.Nutrient.Name]
-			if !ok {
-				nutrMap[nMeas.Nutrient.Name] = &SimpleNutrientMeasurement{
-					Name:  nMeas.Nutrient.Name,
-					Unit:  nMeas.Unit,
-					Value: nMeas.Value * mul,
-				}
-			} else {
-				snm.Value += nMeas.Value * mul
-			}
-		}
-	}
-	simpleMeasures := []*SimpleNutrientMeasurement{}
-	for _, snm := range nutrMap {
-		simpleMeasures = append(simpleMeasures, snm)
-	}
-	return &RecipeNutrition{
-		Name:      r.Name,
-		Nutrition: simpleMeasures,
-	}
 }
 
 // Ingredient is a single ingredient of a recipe.
@@ -156,6 +122,43 @@ type Instruction struct {
 	UID   string `json:"uid,omitempty"`
 	Order int    `json:"order"`
 	Text  string `json:"text"`
+}
+
+// AggregateNutrition aggregates all nutrient values for a given recipe.
+func (r *Recipe) AggregateNutrition() *RecipeNutrition {
+	nutrMap := map[string]*SimpleNutrientMeasurement{}
+	for _, ing := range r.Ingredients {
+		unit := ing.Unit
+		food := ing.Food
+		var foodMeasure *FoodMeasurement
+		for _, fMeas := range food.Measurements {
+			if fMeas.Unit == unit {
+				foodMeasure = fMeas
+				break
+			}
+		}
+		mul := ing.Value / foodMeasure.Value
+		for _, nMeas := range foodMeasure.NutrientMeasurements {
+			snm, ok := nutrMap[nMeas.Nutrient.Name]
+			if !ok {
+				nutrMap[nMeas.Nutrient.Name] = &SimpleNutrientMeasurement{
+					Name:  nMeas.Nutrient.Name,
+					Unit:  nMeas.Unit,
+					Value: nMeas.Value * mul,
+				}
+			} else {
+				snm.Value += nMeas.Value * mul
+			}
+		}
+	}
+	simpleMeasures := []*SimpleNutrientMeasurement{}
+	for _, snm := range nutrMap {
+		simpleMeasures = append(simpleMeasures, snm)
+	}
+	return &RecipeNutrition{
+		Name:      r.Name,
+		Nutrition: simpleMeasures,
+	}
 }
 
 // NewFoodFromNDB creates a food from an ndb food.
