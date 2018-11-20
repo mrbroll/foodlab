@@ -13,18 +13,18 @@ const (
 <ingredient>: uid @reverse .
 <instruction>: uid @reverse .
 <food>: uid @reverse .
-<food.measurement>: uid @reverse .
-<nutrient.measurement>: uid @reverse .
+<measurement>: uid @reverse .
+<nutrient_measurement>: uid @reverse .
 <nutrient>: uid @reverse .
-<name>: string @index(fulltext, hash, term, trigram) @lang .
+<name>: string @index(fulltext, hash, term, trigram) .
 <unit>: string @index(term) .
 <value>: float @index(float) .
-<eq.unit>: string @index(term) .
-<eq.value>: float @index(float) .
-<ndb.id>: string @index(hash) .
-<ndb.group>: string @index(hash, term) .
+<eq_unit>: string @index(term) .
+<eq_value>: float @index(float) .
+<ndb_id>: string @index(hash) .
+<ndb_group>: string @index(hash, term) .
 <order>: int @index(int) .
-<text>: string @index(fulltext, term, trigram) @lang .`
+<text>: string @index(fulltext, term, trigram) .`
 )
 
 const (

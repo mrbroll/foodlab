@@ -64,24 +64,24 @@ func (s *DgraphStore) GetOrCreateFood(f *Food) (*Food, error) {
 	vars := map[string]string{"$name": f.Name}
 	q := `
 	query Food($name: string) {
-		food(func: eq(name@., $name)) {
+		food(func: eq(name, $name)) {
 			uid
-			ndb.id
+			ndb_id
 			name
 			measurement {
 				uid
 				unit
 				value
-				eq.unit
-				eq.value
-				nutrient.measurement {
+				eq_unit
+				eq_value
+				nutrient_measurement {
 					uid
 					unit
 					value
 					nutrient {
 						uid
-						ndb.id
-						ndb.group
+						ndb_id
+						ndb_group
 						name
 					}
 				}
@@ -98,7 +98,7 @@ func (s *DgraphStore) GetOrCreateFood(f *Food) (*Food, error) {
 	}
 	r := new(Root)
 	if err := json.Unmarshal(qResp.Json, r); err != nil {
-		return nil, errors.Wrap(err, "Unmarshaling respons JSON.")
+		return nil, errors.Wrap(err, "Unmarshaling response JSON.")
 	}
 	if r != nil && len(r.Foods) > 0 {
 		return r.Foods[0], nil
@@ -151,14 +151,11 @@ func (s *DgraphStore) GetOrCreateFood(f *Food) (*Food, error) {
 	}
 
 	// replace uids with those from the mutation.
-	hash := food.Hash()
-	food.UID = fmt.Sprintf("%s:%s", mResp.Uids[hash], hash)
+	food.UID = mResp.Uids[food.Hash()]
 	for _, fMeas := range food.Measurements {
-		hash = fMeas.Hash()
-		fMeas.UID = fmt.Sprintf("%s:%s", mResp.Uids[hash], hash)
+		fMeas.UID = mResp.Uids[fMeas.Hash()]
 		for _, nMeas := range fMeas.NutrientMeasurements {
-			hash = nMeas.Hash()
-			nMeas.UID = fmt.Sprintf("%s:%s", mResp.Uids[hash], hash)
+			nMeas.UID = mResp.Uids[nMeas.Hash()]
 		}
 	}
 	return food, nil
@@ -178,16 +175,16 @@ func (s *DgraphStore) GetOrCreateNutrient(n *Nutrient) (*Nutrient, error) {
 	vars := map[string]string{"$name": n.Name}
 	q := `
 	query Nutrient($name: string) {
-		nutrient(func: (name@., $name)) {
+		nutrient(func: eq(name, $name)) {
 			uid
-			ndb.id
-			ndb.group
+			ndb_id
+			ndb_group
 			name
 		}
 	}`
 	qResp, err := client.NewTxn().QueryWithVars(context.Background(), q, vars)
 	if err != nil {
-		return nil, errors.Wrap(err, "Querying for food node.")
+		return nil, errors.Wrap(err, "Querying for nutrient node.")
 	}
 
 	type Root struct {
@@ -221,7 +218,7 @@ func (s *DgraphStore) GetOrCreateNutrient(n *Nutrient) (*Nutrient, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "Adding nutrient to store.")
 	}
-	nutrient.UID = fmt.Sprintf("%s:%s", mResp.Uids[hash], hash)
+	nutrient.UID = mResp.Uids[hash]
 	return nutrient, nil
 }
 
@@ -239,4 +236,52 @@ func (s *DgraphStore) AlterSchema(schema string) error {
 		return errors.Wrap(err, "Altering schema.")
 	}
 	return nil
+}
+
+// SearRecipe searches for recipes by name.
+// It returns an error if the store cannot service the request.
+func (s *DgraphStore) SearchRecipe(name string) ([]*Recipe, error) {
+	conn, err := grpc.Dial(s.host, grpc.WithInsecure())
+	if err != nil {
+		return nil, errors.Wrapf(err, "Dialing grpc host %s.", s.host)
+	}
+	defer conn.Close()
+	client := dgo.NewDgraphClient(api.NewDgraphClient(conn))
+	vars := map[string]string{"$name": name}
+	q := `
+	query Recipe($name: string) {
+		recipe(func: anyofterms(name, $name)) @cascade {
+			name
+			ingredient {
+				unit
+				value
+				food {
+					measurement {
+						unit
+						value
+						nutrient_measurement {
+							unit
+							value
+							nutrient {
+								name
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+	qResp, err := client.NewTxn().QueryWithVars(context.Background(), q, vars)
+	if err != nil {
+		return nil, errors.Wrap(err, "Querying for recipes.")
+	}
+
+	type Root struct {
+		Recipes []*Recipe `json:"recipe"`
+	}
+	r := new(Root)
+	if err := json.Unmarshal(qResp.Json, r); err != nil {
+		return nil, errors.Wrap(err, "Unmarshaling recipes JSON.")
+	}
+	return r.Recipes, nil
 }
