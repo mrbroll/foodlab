@@ -13,7 +13,11 @@ type FoodSearchResponse struct {
 
 // FoodSearchResults is a type for NDB food search API results.
 type FoodSearchResults struct {
-	Foods []*Food `json:"item"`
+	Query       string  `json:"q"`
+	StartOffset int     `json:"start"`
+	EndOffset   int     `json:"end"`
+	Total       int     `json:"total"`
+	Foods       []*Food `json:"item"`
 }
 
 // FoodReport is a type for NDB food reports.
@@ -23,11 +27,11 @@ type FoodReport struct {
 
 // Food is a type for NDB foods.
 type Food struct {
-	NDBID            string              `json:"ndbno"`
-	Name             string              `json:"name"`
-	DataSourceAbbrev string              `json:"ds"`
-	Group            string              `json:"group,omitempty"`
-	Nutrients        []*NutrientQuantity `json:"nutrients,omitempty"`
+	NDBID        string      `json:"ndbno"`
+	Name         string      `json:"name"`
+	SourceAbbrev string      `json:"ds"`
+	Group        string      `json:"group"`
+	Nutrients    []*Nutrient `json:"nutrients"`
 }
 
 // Nutrient is a type for NDB nutrients.
@@ -40,18 +44,11 @@ type Nutrient struct {
 	Measures []*NutrientMeasure `json:"measures"`
 }
 
-// NutrientQuantity is a type for NDB nutrient quanitities.
-type NutrientQuantity struct {
-	Nutrient
-	Unit  string  `json:"unit"`
-	Value float64 `json:"value,string"`
-}
-
 // NutrientMeasure is a type for NDB nutrient measurements.
 type NutrientMeasure struct {
-	Label       string  `json:"label"`
-	EqvQuantity float64 `json:"eqv"`
-	EqvUnit     string  `json:"eunit"`
-	Quantity    float64 `json:"qty"`
-	Value       float64 `json:"value,string"`
+	Label    string  `json:"label"`
+	EqValue  float64 `json:"eqv"`
+	EqUnit   string  `json:"eunit"`
+	Quantity float64 `json:"qty"`
+	Value    float64 `json:"value,string"`
 }

@@ -2,7 +2,6 @@ package recipe
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -15,33 +14,38 @@ import (
 
 // CLIComposer is a type for composing a recipe via CLI.
 type CLIComposer struct {
-	sr    FoodSearcherReporter
-	store RecipeStore
+	ndbStore    NDBStore
+	recipeStore RecipeStore
 }
 
-// FoodSearcher is a type for searching for foods by keywords.
-type FoodSearcher interface {
-	FoodSearch(query string) ([]*ndb.Food, error)
-}
+// NDBStore is a type for interacting with the NDB.
+type NDBStore interface {
+	// FoodSearch returns an iterator for the given query.
+	FoodSearch(query string) *ndb.FoodIter
 
-// FoodReporter is capable of getting NDB food reports.
-type FoodReporter interface {
+	// FoodReport returns an NDB food report for the food with the given ndbno.
+	// It returns an error if the NDB was unreachable.
 	FoodReport(ndbno string) (*ndb.Food, error)
 }
 
-// FoodSearcherReporter is capable of conducting NDB food searches
-// as well as NDB food reports.
-type FoodSearcherReporter interface {
-	FoodSearcher
-	FoodReporter
+// RecipeStore is a type for interacting with Recipes, Ingredients, and Nutritional information.
+type RecipeStore interface {
+	// Add recipe adds a recipe to the store.
+	// It returns an error if the operation was unsuccessful.
+	AddRecipe(r *Recipe) error
+
+	// GetOrCreateFood idempotently creates the food in the store,
+	// and returns it with the UID attribute populated.
+	// It returns an error if the operation was unsuccessful.
+	GetOrCreateFood(food *Food) (*Food, error)
 }
 
 // NewCLIComposer returns a cli composer using the given interfaces
 // for food searches and reports, as well as recipe storage.
-func NewCLIComposer(sr FoodSearcherReporter, store RecipeStore) *CLIComposer {
+func NewCLIComposer(ndb NDBStore, rs RecipeStore) *CLIComposer {
 	return &CLIComposer{
-		sr:    sr,
-		store: store,
+		ndbStore:    ndb,
+		recipeStore: rs,
 	}
 }
 
@@ -64,7 +68,7 @@ func (c *CLIComposer) Compose() error {
 	}
 
 	// store recipe
-	if err := c.store.AddRecipe(&Recipe{
+	if err := c.recipeStore.AddRecipe(&Recipe{
 		Name:         name,
 		Ingredients:  ingredients,
 		Instructions: instructions,
@@ -89,94 +93,94 @@ func (c *CLIComposer) getName(in io.Reader) (string, error) {
 // getIngredients get ingredients  using input from the given reader.
 // It returns an error if unsuccessful.
 func (c *CLIComposer) getIngredients(in io.Reader) ([]*Ingredient, error) {
-	reader := bufio.NewReader(in)
+	input := bufio.NewReader(in)
 	fmt.Println("Please add ingredients:")
 	ingredients := []*Ingredient{}
-	for addIngredient := true; addIngredient; {
+	for {
 		ingredient := new(Ingredient)
 		fmt.Println("Ingredient Name:")
-		keywords, err := reader.ReadString('\n')
+		keywords, err := input.ReadString('\n')
 		if err != nil {
 			return nil, errors.Wrap(err, "Reading ingredient name.")
 		}
 		keywords = strings.TrimSpace(keywords)
 		// search for suggestions
-		foods, err := c.sr.FoodSearch(keywords)
-		if err != nil {
-			return nil, errors.Wrap(err, "Searching for food.")
-		}
-		foodMap := map[string]*ndb.Food{}
-		for _, food := range foods {
-			foodMap[food.NDBID] = food
-			fmt.Printf("%s: %s\n", food.NDBID, food.Name)
-		}
-		fmt.Println("Please choose one of the suggested foods above by entering its id:")
-	SELECT_SUGGESTION:
-		foodID, err := reader.ReadString('\n')
-		if err != nil {
-			return nil, errors.Wrap(err, "Reading selected food id.")
-		}
-		foodID = strings.TrimSpace(foodID)
-		food, ok := foodMap[foodID]
-		if !ok {
-			fmt.Printf("ID %s not found, please select a valid food ID:\n", foodID)
-			goto SELECT_SUGGESTION
-		}
-		ingredient.Name = food.Name
-		node, err := c.store.GetIngredient(food.Name)
-		if err != nil {
-			return nil, errors.Wrap(err, "Getting ingredient from store.")
-		}
-		fmt.Printf("%+v\n", node)
-		if node != nil {
-			ingredient.Uid = node.Uid
-		}
-
-		// TODO: use food report to calculate nutrition
-		// this just prints for now
-		foodReport, err := c.sr.FoodReport(food.NDBID)
-		if err != nil {
-			return nil, errors.Wrapf(err, "Getting food report for ndb id %s.", food.NDBID)
-		}
-		foodJSON, _ := json.MarshalIndent(foodReport, "", "  ")
-		fmt.Printf("%s\n", foodJSON)
-	MEASURE:
-		meas := new(Measurement)
-		fmt.Println("Ingredient Measurement (<number> [<unit>]:")
-		m, err := reader.ReadString('\n')
-		if err != nil {
-			return nil, errors.Wrap(err, "Reading ingredient measurement.")
-		}
-		mParts := strings.Split(strings.TrimSpace(m), " ")
-		if len(mParts) >= 1 {
-			q, err := strconv.ParseFloat(mParts[0], 64)
+		foodIter := c.ndbStore.FoodSearch(keywords)
+		for ndbFood := foodIter.Next(); ndbFood != nil; ndbFood = foodIter.Next() {
+		FOOD_SUGGESTION:
+			fmt.Printf("Did you mean \"%s\" (y/n)?\n:", ndbFood.Name)
+			answer, err := input.ReadString('\n')
 			if err != nil {
-				fmt.Println("Please enter a valid number.")
-				goto MEASURE
+				return nil, errors.Wrap(err, "Reading answer for food suggestion.")
 			}
-			meas.Value = q
-		}
-		if len(mParts) == 2 {
-			u := strings.TrimSpace(strings.ToLower(mParts[1]))
-			unit, ok := UnitAliases[u]
-			if !ok {
-				fmt.Printf("Unrecognized unit %s\n", u)
-				goto MEASURE
+			answer = strings.ToLower(strings.TrimSpace(answer))
+			if answer == "n" {
+				continue
+			} else if answer == "y" {
+				ndbFood, err := c.ndbStore.FoodReport(ndbFood.NDBID)
+				if err != nil {
+					return nil, errors.Wrap(err, "Getting NDB Food Report.")
+				}
+			GET_UNIT:
+				// get unit of measure
+				measures := ndbFood.Nutrients[0].Measures
+				fmt.Printf("Please select a unit of measure (%d-%d):\n", 0, len(measures)-1)
+				for i, meas := range measures {
+					fmt.Printf("%d: %s\n", i, meas.Label)
+				}
+				measIdxStr, err := input.ReadString('\n')
+				if err != nil {
+					return nil, errors.Wrap(err, "Getting unit of measure.")
+				}
+				measIdx, err := strconv.Atoi(strings.TrimSpace(measIdxStr))
+				if err != nil {
+					fmt.Println(err)
+					goto GET_UNIT
+				} else if measIdx < 0 || measIdx >= len(measures) {
+					fmt.Println("Not a valid option.")
+					goto GET_UNIT
+				}
+				ingredient.Unit = measures[measIdx].Label
+			GET_QUANTITY:
+				// get measured quantity
+				fmt.Println("Enter a quantity as a decimal:")
+				qStr, err := input.ReadString('\n')
+				if err != nil {
+					return nil, errors.Wrap(err, "Getting quantity.")
+				}
+				quantity, err := strconv.ParseFloat(strings.TrimSpace(qStr), 64)
+				if err != nil {
+					fmt.Println(err)
+					goto GET_QUANTITY
+				}
+				ingredient.Value = quantity
+
+				food, err := c.recipeStore.GetOrCreateFood(NewFoodFromNDB(ndbFood))
+				if err != nil {
+					return nil, errors.Wrap(err, "Getting or creating food.")
+				}
+				ingredient.Food = food
+				break
+			} else {
+				fmt.Printf("Invalid input: \"%s\"\n", answer)
+				goto FOOD_SUGGESTION
 			}
-			meas.Unit = unit
-		} else {
-			//TODO: get food unit size for nutrients
 		}
-		ingredient.Measurement = meas
+		ingredient.UID = fmt.Sprintf("_:%s", ingredient.Hash())
 		ingredients = append(ingredients, ingredient)
 
-		fmt.Println("Would you like to add another ingredient? (y/n):")
-		a, err := reader.ReadString('\n')
+	ANOTHER_INGREDIENT:
+		fmt.Println("Add another ingredient? (y/n)")
+		a, err := input.ReadString('\n')
 		if err != nil {
-			return nil, errors.Wrap(err, "Reading next instruction answer.")
+			return nil, errors.Wrap(err, "Reading next ingredient answer.")
 		}
-		if strings.TrimSpace(a) == "n" {
-			addIngredient = false
+		a = strings.ToLower(strings.TrimSpace(a))
+		if a == "n" {
+			break
+		} else if a != "y" {
+			fmt.Printf("Invalid input: \"%s\".\n", a)
+			goto ANOTHER_INGREDIENT
 		}
 	}
 

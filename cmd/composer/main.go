@@ -9,13 +9,21 @@ import (
 )
 
 const (
-	schema string = `<ingredient>: uid @reverse .
+	schema string = `<recipe>: uid .
+<ingredient>: uid @reverse .
 <instruction>: uid @reverse .
+<food>: uid @reverse .
+<food.measurement>: uid @reverse .
+<nutrient.measurement>: uid @reverse .
+<nutrient>: uid @reverse .
 <name>: string @index(fulltext, hash, term, trigram) @lang .
+<unit>: string @index(term) .
+<value>: float @index(float) .
+<eq.unit>: string @index(term) .
+<eq.value>: float @index(float) .
+<ndb.id>: string @index(hash) .
+<ndb.group>: string @index(hash, term) .
 <order>: int @index(int) .
-<preparation>: string @index(fulltext, term, trigram) @lang .
-<measurement.unit>: string @index(term) .
-<measurement.value>: float @index(float) .
 <text>: string @index(fulltext, term, trigram) @lang .`
 )
 

@@ -4,15 +4,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 )
 
 const (
-	baseURL            string = "api.nal.usda.gov/ndb"
-	defaultSearchLimit int    = 50
+	baseURL               string = "api.nal.usda.gov/ndb"
+	defaultSearchPageSize int    = 1500
 )
+
+// FoodIter is a type for iterating over a result set of foods from a food search.
+type FoodIter struct {
+	client     *HTTPClient
+	err        error
+	query      string
+	totalItems int
+	offset     int
+	pageSize   int
+	foods      []*Food
+}
 
 // Getter is an interface for making HTTP GET requests.
 type Getter interface {
@@ -33,16 +45,68 @@ func NewHTTPClient(getter Getter, token string) *HTTPClient {
 	}
 }
 
-// FoodSearch searches for foods matching the given query.
+// FoodSearch returns a food iterator for lazily producing search results.
+// The returned iterator is guaranteed to be non-nil.
+func (c *HTTPClient) FoodSearch(query string) *FoodIter {
+	return &FoodIter{
+		client:     c,
+		query:      query,
+		totalItems: 0,
+		offset:     0,
+		pageSize:   defaultSearchPageSize,
+		foods:      []*Food{},
+	}
+}
+
+// Next returns the next food in the iterator.
+// Callers should check it.Err() if Next returns nil.
+func (it *FoodIter) Next() *Food {
+	if it.offset%it.pageSize == 0 {
+		fsResp, err := it.client.GetFoodSearchPage(it.query, it.offset, it.pageSize)
+		if err != nil {
+			it.err = errors.Wrap(err, "Getting food search page.")
+			return nil
+		}
+		if fsResp.Results == nil {
+			it.err = errors.Errorf("No results for query \"%s\".", it.query)
+			return nil
+		}
+		it.totalItems = fsResp.Results.Total
+		it.foods = append(it.foods, fsResp.Results.Foods...)
+
+	}
+
+	if it.offset >= it.totalItems {
+		it.err = io.EOF
+		return nil
+	}
+
+	defer func() {
+		it.offset += 1
+	}()
+
+	return it.foods[it.offset]
+}
+
+// Err returns any error encountered during iteration.
+// It returns io.EOF if the iterator is exhausted.
+// Otherwise, it returns a descriptive error of the issue.
+// It returns nil if there was no error.
+func (it *FoodIter) Err() error {
+	return it.err
+}
+
+// GetFoodSearchPage gets a page of foods matching the given query.
 // It returns an error if any encoding/decoding errors are encountered,
 // or there was an issue making the request to the NDB API.
-func (c *HTTPClient) FoodSearch(query string) ([]*Food, error) {
+func (c *HTTPClient) GetFoodSearchPage(query string, offset int, limit int) (*FoodSearchResponse, error) {
 	url := fmt.Sprintf(
-		"http://%s/search?api_key=%s&q=%s&ds=%s&max=%d",
+		"http://%s/search?api_key=%s&q=%s&offset=%d&max=%d",
 		baseURL,
 		c.token,
 		url.QueryEscape(query),
-		defaultSearchLimit,
+		offset,
+		limit,
 	)
 
 	resp, err := c.getter.Get(url)
@@ -66,11 +130,7 @@ func (c *HTTPClient) FoodSearch(query string) ([]*Food, error) {
 		return nil, errors.Wrap(err, "Unmarshaling NDB search response.")
 	}
 
-	if searchResp.Results == nil {
-		return nil, nil
-	}
-
-	return searchResp.Results.Foods, nil
+	return searchResp, nil
 }
 
 // FoodReport returns an NDB food report for the food with the given ndbno.
